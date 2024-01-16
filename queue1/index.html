@@ -1,0 +1,85 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="HandheldFriendly" content="True">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="no-referrer-when-downgrade">
+
+    <title>Load Balancing</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;700&family=Nunito:ital,wght@0,400;0,700;1,400;1,700&family=Lora:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet" async>
+    <link rel="stylesheet" href="https://samwho.dev/reset.css?h=a91aa13d5ef477bf1a1c" async>
+    <link rel="stylesheet" href="https://samwho.dev/main.css?h=0a4179a0a0e61480136f" async>
+</head>
+<body>
+<article class="post">
+
+    <div class="content">
+        <script type="module" src="js/load-balancers.js"></script>
+<style>
+.simulation {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 2.5em;
+}
+
+.load-balancer {
+    color: black;
+    font-weight: bold;
+}
+
+.request {
+    color: #04BF8A;
+    font-weight: bold;
+}
+
+.server {
+    color: #999999;
+    font-weight: bold;
+}
+
+.dropped {
+    color: red;
+    font-weight: bold;
+}
+
+.lds-dual-ring {
+  display: inline-block;
+  width: 80px;
+  height: 80px;
+}
+.lds-dual-ring:after {
+  content: " ";
+  display: block;
+  width: 64px;
+  height: 64px;
+  margin: 8px;
+  border-radius: 50%;
+  border: 6px solid #000;
+  border-color: #000 transparent #000 transparent;
+  animation: lds-dual-ring 1.2s linear infinite;
+}
+@keyframes lds-dual-ring {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+</style>
+
+<div id="7" class="simulation" style="height: 250px">
+    <div class="lds-dual-ring"></div>
+</div>
+
+    </div>
+</article>
+
+</body>

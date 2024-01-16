@@ -1,0 +1,429 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="HandheldFriendly" content="True">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="no-referrer-when-downgrade">
+
+    <title>Load Balancing</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;700&family=Nunito:ital,wght@0,400;0,700;1,400;1,700&family=Lora:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet" async>
+    <link rel="stylesheet" href="https://samwho.dev/reset.css?h=a91aa13d5ef477bf1a1c" async>
+    <link rel="stylesheet" href="https://samwho.dev/main.css?h=0a4179a0a0e61480136f" async>
+</head>
+<body>
+<article class="post">
+    <header>
+        <h1>Load Balancing</h1>
+    </header>
+    
+    <div class="content">
+        <script type="module" src="js/load-balancers.js"></script>
+<style>
+.simulation {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 2.5em;
+}
+
+.load-balancer {
+    color: black;
+    font-weight: bold;
+}
+
+.request {
+    color: #04BF8A;
+    font-weight: bold;
+}
+
+.server {
+    color: #999999;
+    font-weight: bold;
+}
+
+.dropped {
+    color: red;
+    font-weight: bold;
+}
+
+.lds-dual-ring {
+  display: inline-block;
+  width: 80px;
+  height: 80px;
+}
+.lds-dual-ring:after {
+  content: " ";
+  display: block;
+  width: 64px;
+  height: 64px;
+  margin: 8px;
+  border-radius: 50%;
+  border: 6px solid #000;
+  border-color: #000 transparent #000 transparent;
+  animation: lds-dual-ring 1.2s linear infinite;
+}
+@keyframes lds-dual-ring {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+</style>
+<p>Past a certain point, web applications outgrow a single server deployment.
+Companies either want to increase their availability, scalability, or both! To
+do this, they deploy their application across multiple servers with a load
+balancer in front to distribute incoming requests. Big companies may need
+thousands of servers running their web application to handle the load.</p>
+<p>In this post we're going to focus on the ways that a single load balancer might
+distribute HTTP requests to a set of servers. We'll start from the bottom and
+work our way up to modern load balancing algorithms.</p>
+<h2 id="visualising-the-problem"><a class="anchor" href="#visualising-the-problem">#</a>
+Visualising the problem</h2>
+<p>Let's start at the beginning: a single <span class="load-balancer">load
+balancer</span> sending <span class="request">requests</span> to a single <span
+class="server">server</span>. <span class="request">Requests</span> are being
+sent at a rate of 1 request per second (RPS), and each <span
+class="request">request</span> reduces in size as the <span
+class="server">server</span> processes it.</p>
+<div id="1" class="simulation" style="height: 200px">
+    <div class="lds-dual-ring"></div>
+</div>
+<p>For a lot of websites, this setup works just fine. Modern <span
+class="server">servers</span> are powerful and can handle a lot of <span
+class="request">requests</span>. But what happens when they can't keep up?</p>
+<div id="2" class="simulation" style="height: 200px">
+    <div class="lds-dual-ring"></div>
+</div>
+<p>Here we see that a rate of 3 RPS causes some <span
+class="request">requests</span> to get <span class="dropped">dropped</span>. If
+a <span class="request">request</span> arrives at the <span
+class="server">server</span> while another <span class="request">request</span>
+is being processed, the <span class="server">server</span> will <span
+class="dropped">drop</span> it.  This will result in an error being shown to the
+user and is something we want to avoid. We can add another <span
+class="server">server</span> to our <span class="load-balancer">load
+balancer</span> to fix this.</p>
+<div id="3" class="simulation" style="height: 200px">
+    <div class="lds-dual-ring"></div>
+</div>
+<p>No more <span class="dropped">dropped</span> <span
+class="request">requests</span>! The way our <span class="load-balancer">load
+balancer</span> is behaving here, sending a request to each <span
+class="server">server</span> in turn, is called &quot;round robin&quot; load balancing.
+It's one of the simplest forms of load balancing, and works well when your <span
+class="server">servers</span> are all equally powerful and your <span
+class="request">requests</span> are all equally expensive.</p>
+<div id="4" class="simulation" style="height: 200px">
+    <div class="lds-dual-ring"></div>
+</div>
+<h2 id="when-round-robin-doesn-t-cut-it"><a class="anchor" href="#when-round-robin-doesn-t-cut-it">#</a>
+When round robin doesn't cut it</h2>
+<p>In the real world, it's rare for <span class="server">servers</span> to be
+equally powerful and <span class="request">requests</span> to be equally
+expensive. Even if you use the exact same <span class="server">server</span>
+hardware, performance may differ. Applications may have to service many
+different types of <span class="request">requests</span>, and these will likely
+have different performance characteristics.</p>
+<p>Let's see what happens when we vary <span class="request">request</span> cost.
+In the following simulation, <span class="request">requests</span> aren't
+equally expensive. You'll be able to see this by some <span
+class="request">requests</span> taking longer to shrink than others.</p>
+<div id="5" class="simulation" style="height: 200px">
+    <div class="lds-dual-ring"></div>
+</div>
+<p>While most <span class="request">requests</span> get served successfully, we do
+<span class="dropped">drop</span> some. One of the ways we can mitigate this is
+to have a &quot;request queue.&quot;</p>
+<div id="6" class="simulation" style="height: 250px">
+    <div class="lds-dual-ring"></div>
+</div>
+<p>Request queues help us deal with uncertainty, but it's a trade-off. We will
+<span class="dropped">drop</span> fewer <span class="request">requests</span>,
+but at the cost of some <span class="request">requests</span> having a higher
+latency. If you watch the above simulation long enough, you might notice the
+<span class="request">requests</span> subtly changing colour. The longer they go
+without being served, the more their colour will change. You'll also notice that
+thanks to the <span class="request">request</span> cost variance, <span
+class="server">servers</span> start to exhibit an imbalance. Queues will get
+backed up on <span class="server">servers</span> that get unlucky and have to
+serve multiple expensive <span class="request">requests</span> in a row. If
+a queue is full, we will <span class="dropped">drop</span> the <span
+class="request">request</span>.</p>
+<p>Everything said above applies equally to <span class="server">servers</span>
+that vary in power. In the next simulation we also vary the power of each
+<span class="server">server</span>, which is represented visually with a darker
+shade of grey.</p>
+<div id="7" class="simulation" style="height: 250px">
+    <div class="lds-dual-ring"></div>
+</div>
+<p>The <span class="server">servers</span> are given a random power value, but odds
+are some are less powerful than others and quickly start to <span
+class="dropped">drop</span> <span class="request">requests</span>. At the same
+time, the more powerful <span class="server">servers</span> sit idle most of the
+time. This scenario shows the key weakness of round robin: variance.</p>
+<p>Despite its flaws, however, round robin is still the default HTTP load balancing
+method for <a href="https://nginx.org/en/docs/http/load_balancing.html">nginx</a>.</p>
+<h2 id="improving-on-round-robin"><a class="anchor" href="#improving-on-round-robin">#</a>
+Improving on round robin</h2>
+<p>It's possible to tweak round robin to perform better with variance. There's an
+algorithm called called &quot;weighted round robin&quot; which involves getting humans
+to tag each <span class="server">server</span> with a weight that dictates how
+many <span class="request">requests</span> to send to it.</p>
+<p>In this simulation, we use each <span class="server">server's</span> known power
+value as its weight, and we give more powerful <span
+class="server">servers</span> more <span class="request">requests</span> as we
+loop through them.</p>
+<div id="8" class="simulation" style="height: 250px">
+    <div class="lds-dual-ring"></div>
+</div>
+<p>While this handles the variance of <span class="server">server</span> power
+better than vanilla round robin, we still have <span
+class="request">request</span> variance to contend with. In practice, getting
+humans to set the weight by hand falls apart quickly. Boiling <span
+class="server">server</span> performance down to a single number is hard, and
+would require careful load testing with real workloads. This is rarely done, so
+another variant of weighted round robin calculates weights dynamically by using
+a proxy metric: latency.</p>
+<p>It stands to reason that if one <span class="server">server</span> serves
+<span class="request">requests</span> 3 times faster than another <span class="server">server</span>, it's probably 3 times faster and should receive
+3 times more <span class="request">requests</span> than the other <span class="server">server</span>.</p>
+<div id="9" class="simulation" style="height: 250px">
+    <div class="lds-dual-ring"></div>
+</div>
+<p>I've added text to each <span class="server">server</span> this time that shows
+the average latency of the last 3 <span class="request">requests</span> served.
+We then decide whether to send 1, 2, or 3 <span class="request">requests</span>
+to each <span class="server">server</span> based on the relative differences in
+the latencies. The result is very similar to the initial weighted round robin
+simulation, but there's no need to specify the weight of each <span
+class="server">server</span> up front. This algorithm will also be able to adapt
+to changes in <span class="server">server</span> performance over time. This is
+called &quot;dynamic weighted round robin.&quot;</p>
+<p>Let's see how it handles a complex situation, with high variance in both <span
+class="server">server</span> power and <span class="request">request</span>
+cost. The following simulation uses randomised values, so feel free to refresh
+the page a few times to see it adapt to new variants.</p>
+<div id="10" class="simulation" style="height: 250px">
+    <div class="lds-dual-ring"></div>
+</div>
+<h2 id="moving-away-from-round-robin"><a class="anchor" href="#moving-away-from-round-robin">#</a>
+Moving away from round robin</h2>
+<p>Dynamic weighted round robin seems to account well for variance in both <span
+class="server">server</span> power and <span class="request">request
+</span> cost. But what if I told you we could do even better, and with a simpler
+algorithm?</p>
+<div id="11" class="simulation" style="height: 250px">
+    <div class="lds-dual-ring"></div>
+</div>
+<p>This is called &quot;least connections&quot; load balancing.</p>
+<p>Because the <span class="load-balancer">load balancer</span> sits between the
+<span class="server">server</span> and the user, it can accurately keep track
+of how many outstanding <span class="request">requests</span> each <span
+class="server">server</span> has. Then when a new <span class="request">
+request</span> comes in and it's time to determine where to send it, it knows
+which <span class="server">servers</span> have the least work to do and
+prioritises those.</p>
+<p>This algorithm performs extremely well regardless how much variance exists.
+It cuts through uncertainty by maintaining an accurate understanding of what
+each <span class="server">server</span> is doing. It also has the benefit of
+being very simple to implement.</p>
+<p>Let's see this in action in a similarly complex simulation, the same parameters
+we gave the dynamic weighted round robin algorithm above. Again, these
+parameters are randomised within given ranges, so refresh the page to see new
+variants.</p>
+<div id="12" class="simulation" style="height: 250px">
+    <div class="lds-dual-ring"></div>
+</div>
+<p>While this algorithm is a great balance between simplicity and performance, it's
+not immune to <span class="dropped">dropping</span> <span
+class="request">requests</span>. However, what you'll notice is that the only
+time this algorithm <span class="dropped">drops</span> <span
+class="request">requests</span> is when there is literally no more queue space
+available. It will make sure all available resources are in use, and that makes
+it a great default choice for most workloads.</p>
+<h2 id="optimizing-for-latency"><a class="anchor" href="#optimizing-for-latency">#</a>
+Optimizing for latency</h2>
+<p>Up until now I've been avoiding a crucial part of the discussion: what we're
+optimising for. Implicitly, I've been considering <span
+class="dropped">dropped</span> <span class="request">requests</span> to be
+really bad and seeking to avoid them. This is a nice goal, but it's not the
+metric we most want to optimise for in an HTTP <span class="load-balancer">load
+balancer</span>.</p>
+<p>What we're often more concerned about is latency. This is measured in
+milliseconds from the moment a <span class="request">request</span> is created
+to the moment it has been served. When we're discussing latency in this context,
+it is common to talk about different &quot;percentiles.&quot; For example, the 50th
+percentile (also called the &quot;median&quot;) is defined as the millisecond value for
+which 50% of requests are below, and 50% are above.</p>
+<p>I ran 3 simulations with identical parameters for 60 seconds and took a variety
+of measurements every second. Each simulation varied only by the load balancing
+algorithm used. Let's compare the medians for each of the 3 simulations:</p>
+<div id="graph-medians"></div>
+<p>You might not have expected it, but round robin has the best median latency. If
+we weren't looking at any other data points, we'd miss the full story.  Let's
+take a look at the 95th and 99th percentiles.</p>
+<div id="graph-higher"></div>
+<p>Note: there's no colour difference between the different percentiles for each
+load balancing algorithm. Higher percentiles will always be higher on the graph.</p>
+<p>We see that round robin doesn't perform well in the higher percentiles.  How can
+it be that round robin has a great median, but bad 95th and 99th percentiles?</p>
+<p>In round robin, the state of each <span class="server">server</span> isn't
+considered, so you'll get quite a lot of <span class="request">requests</span>
+going to <span class="server">servers</span> that are idle. This is how we get
+the low 50th percentile. On the flip side, we'll also happily send <span
+class="request">requests</span> to <span class="server">servers</span> that are
+overloaded, hence the bad 95th and 99th percentiles.</p>
+<p>We can take a look at the full data in histogram form:</p>
+<div id="histogram-1"></div>
+<p>I chose the parameters for these simulations to avoid <span
+class="dropped">dropping</span> any <span class="request">requests</span>. This
+guarantees we compare the same number of data points for all 3 algorithms.
+Let's run the simulations again but with an increased RPS value, designed to
+push all of the algorithms past what they can handle.  The following is a graph
+of cumulative <span class="request">requests</span> <span
+class="dropped">dropped</span> over time.</p>
+<div id="graph-dropped"></div>
+<p>Least connections handles overload much better, but the cost of doing that is
+slightly higher 95th and 99th percentile latencies. Depending on your use-case,
+this might be a worthwhile trade-off.</p>
+<h2 id="one-last-algorithm"><a class="anchor" href="#one-last-algorithm">#</a>
+One last algorithm</h2>
+<p>If we <em>really</em> want to optimise for latency, we need an algorithm that takes
+latency into account. Wouldn't it be great if we could combine the dynamic
+weighted round robin algorithm with the least connections algorithm? The latency
+of weighted round robin and the resilience of least connections.</p>
+<p>Turns out we're not the first people to have this thought. Below is a simulation
+using an algorithm called &quot;peak exponentially weighted moving average&quot; (or
+PEWMA). It's a long and complex name but hang in there, I'll break down how it
+works in a moment.</p>
+<div id="13" class="simulation" style="height: 250px">
+    <div class="lds-dual-ring"></div>
+</div>
+<p>I've set specific parameters for this simulation that are guaranteed to exhibit
+an expected behaviour. If you watch closely, you'll notice that the algorithm
+just stops sending <span class="request">requests</span> to the leftmost <span
+class="server">server</span> after a while. It does this because it figures out
+that all of the other <span class="server">servers</span> are faster, and
+there's no need to send <span class="request">requests</span> to the slowest
+one. That will just result in <span class="request">requests</span> with a
+higher latency.</p>
+<p>So how does it do this? It combines techniques from dynamic weighted round robin
+with techniques from least connections, and sprinkles a little bit of its own
+magic on top.</p>
+<p>For each <span class="server">server</span>, the algorithm keeps track of the
+latency from the last N <span class="request">requests</span>. Instead of using
+this to calculate an average, it sums the values but with an exponentially
+decreasing scale factor. This results in a value where the older a latency is,
+the less it contributes to the sum. Recent <span class="request">requests</span>
+influence the calculation more than old ones.</p>
+<p>That value is then taken and multiplied by the number of open connections to the
+<span class="server">server</span> and the result is the value we use to choose
+which <span class="server">server</span> to send the next <span
+class="request">request</span> to. Lower is better.</p>
+<p>So how does it compare? First let's take a look at the 50th, 95th, and 99th
+percentiles when compared against the least connections data from earlier.</p>
+<div id="pewma-graph"></div>
+<p>We see a marked improvement across the board! It's far more pronounced at the
+higher percentiles, but consistently present for the median as well. Here we
+can see the same data in histogram form.</p>
+<div id="pewma-histogram"></div>
+<p>How about <span class="dropped">dropped</span> <span
+class="requests">requests</span>?</p>
+<div id="pewma-dropped"></div>
+<p>It starts out performing better, but over time performs worse than least
+connections. This makes sense. PEWMA is opportunistic in that it tries to get
+the best latency, and this means it may sometimes leave a <span class="server">
+server</span> less than fully loaded.</p>
+<p>I want to add here that PEWMA has a lot of parameters that can be tweaked. The
+implementation I wrote for this post uses a configuration that seemed to work
+well for the situations I tested it in, but further tweaking could get you
+better results vs least connections. This is one of the downsides of PEWMA vs
+least connections: extra complexity.</p>
+<h2 id="conclusion"><a class="anchor" href="#conclusion">#</a>
+Conclusion</h2>
+<p>I spent a long time on this post. It was difficult to balance realism against
+ease of understanding, but I feel good about where I landed. I'm hopeful that
+being able to see how these complex systems behave in practice, in ideal and
+less-than-ideal scenarios, helps you grow an intuitive understanding of when
+they would best apply to your workloads.</p>
+<p><strong>Obligatory disclaimer</strong>: You must always benchmark your own workloads over
+taking advice from the Internet as gospel. My simulations here ignore some real
+life constraints (server slow start, network latency), and are set up to display
+specific properties of each algorithm. They aren't realistic benchmarks to be
+taken at face value.</p>
+<p>To round this out, I leave you with a version of the simulation that lets you
+tweak most of the parameters in real time. Have fun!</p>
+<p><strong>EDIT</strong>: <em>Thanks to everyone who participated in the discussions on
+<a href="https://news.ycombinator.com/item?id=35588797">Hacker News</a>,
+<a href="https://twitter.com/samwhoo/status/1645429789107318789?s=20">Twitter</a> and
+<a href="https://lobste.rs/s/kydugs/load_balancing">Lobste.rs</a>!</em></p>
+<p><em>You all had a tonne of great questions and I tried to answer all of them.
+Some of the common themes were about missing things, either algorithms (like
+&quot;power of 2 choices&quot;) or downsides of algorithms covered (like how &quot;least
+connections&quot; handles errors from servers).</em></p>
+<p><em>I tried to strike a balance between post length and complexity of the
+simulations. I'm quite happy with where I landed, but like you I also wish I
+could have covered more. I'd love to see people taking inspiration from this
+and covering more topics in this space in a visual way. Please ping me if you
+do!</em></p>
+<p><em>The other common theme was &quot;how did you make this?&quot; I used
+<a href="https://pixijs.com/">PixiJS</a> and I'm really happy with how it turned out. It's
+my first time using this library and it was quite easy to get to grips with.
+If writing visual explanations like this are something you're interested in,
+I recommend it!</em></p>
+<h2 id="playground"><a class="anchor" href="#playground">#</a>
+Playground</h2>
+<div id="fin" class="simulation" style="height: 450px; margin-top: 20px">
+    <div class="lds-dual-ring"></div>
+</div>
+
+    </div>
+</article>
+
+<div class="newsletter-footer">
+    <a href="https://twitter.com/samwhoo" target=_blank>
+    
+    <img style="border-radius: 50%; margin-bottom: 0.5rem" src="https:&#x2F;&#x2F;samwho.dev&#x2F;processed_images&#x2F;me.48163d7e0aaa3fbd.jpg" alt="Sam Rose" />
+        <p>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <g clip-path="url(#clip0_260_538)">
+                    <path
+                        d="M23.2245 5.78963C22.4373 6.13838 21.591 6.37087 20.6981 6.48075C21.606 5.94187 22.3042 5.08238 22.632 4.06688C21.7826 4.56488 20.8417 4.9305 19.8405 5.12325C19.041 4.27575 17.9006 3.75 16.6372 3.75C14.2102 3.75 12.2433 5.7 12.2433 8.10413C12.2433 8.44425 12.2831 8.77575 12.3581 9.0975C8.70708 8.91412 5.46895 7.17863 3.30258 4.54463C2.92195 5.18813 2.70783 5.94187 2.70783 6.73725C2.70783 8.24887 3.48183 9.57937 4.66195 10.3635C3.94158 10.3414 3.26358 10.1411 2.66995 9.81975C2.66995 9.83288 2.66995 9.85238 2.66995 9.87075C2.66995 11.9831 4.18495 13.7419 6.19308 14.1424C5.82595 14.2429 5.4382 14.2987 5.03845 14.2987C4.75458 14.2987 4.4782 14.2665 4.21045 14.2185C4.76958 15.9446 6.39183 17.2065 8.3137 17.2436C6.80995 18.4095 4.9162 19.1077 2.8567 19.1077C2.50083 19.1077 2.1532 19.0875 1.80933 19.0459C3.75445 20.2778 6.06483 21 8.5447 21C16.6256 21 21.0461 14.364 21.0461 8.60737C21.0461 8.41875 21.0401 8.23088 21.0311 8.04525C21.894 7.43625 22.6372 6.6675 23.2245 5.78963Z"
+                        fill="#1DA1F2" />
+                </g>
+                <defs>
+                    <clipPath id="clip0_260_538">
+                        <rect width="24" height="24" fill="white" />
+                    </clipPath>
+                </defs>
+            </svg>
+        </p>
+    </a>
+
+    <p>
+        Enjoyed this post? Consider subscribing to get updates about new posts
+        via email!
+    </p>
+    <p>
+        Alternatively, you can <a href="/rss.xml">subscribe via RSS</a>.
+    </p>
+</div>
+<form action="https://buttondown.email/api/emails/embed-subscribe/samwho" method="post" target="popupwindow"
+    onsubmit="window.open('https://buttondown.email/samwho', 'popupwindow')" class="embeddable-buttondown-form">
+    <input type="email" name="email" id="bd-email" placeholder="your@email.adddress" />
+    <input type="submit" value="Subscribe" />
+    <p>
+        <a href="https://buttondown.email/refer/samwho" target="_blank">powered by buttondown</a>
+    </p>
+</form>
+
+
+</body>
